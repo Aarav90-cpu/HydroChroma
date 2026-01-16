@@ -55,7 +55,7 @@ publishing {
     publications {
         register<MavenPublication>("release") {
             // Replace 'YourGitHubUsername' with your actual GitHub username!
-            groupId = "com.github.YourGitHubUsername"
+            groupId = "com.github.Aarav90-cpu"
             artifactId = "hydrochroma"
             version = "1.0.0"
 
