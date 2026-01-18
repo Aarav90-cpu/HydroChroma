@@ -25,6 +25,7 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.10" // Matches standard Compose versions
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -55,9 +56,9 @@ publishing {
     publications {
         register<MavenPublication>("release") {
             // Replace 'YourGitHubUsername' with your actual GitHub username!
-            groupId = "com.github.Aarav90-cpu"
+            groupId = "com.arkstudios.hydrochroma"
             artifactId = "hydrochroma"
-            version = "1.0.0"
+            version = "alpha2.0"
 
             afterEvaluate {
                 from(components["release"])
