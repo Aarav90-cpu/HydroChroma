@@ -19,6 +19,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
@@ -42,17 +46,23 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceIn
 import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
+import com.kyant.capsule.ContinuousCapsule
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 // --- 🌊 Configuration Classes ---
@@ -112,6 +122,225 @@ fun animations(
     onClick: HydroAction? = null,
     onAnimate: HydroAction? = null
 ): HydroAnimations = HydroAnimations(onClick, onAnimate)
+
+// --- 🧊 Liquid Glass Configuration ---
+
+@Immutable
+data class LiquidGlassConfig(
+    val blurRadius: Dp = 8.dp,
+    val refractionHeight: Dp = 12.dp,
+    val refractionAmount: Dp = 24.dp,
+    val vibrancy: Boolean = true,
+    val depthEffect: Boolean = true,
+    val chromaticAberration: Boolean = false // Standard static CA (disabled if using HydroChroma)
+)
+
+fun liquidGlassConfig(
+    blurRadius: Dp = 8.dp,
+    refractionHeight: Dp = 12.dp,
+    refractionAmount: Dp = 24.dp,
+    vibrancy: Boolean = true,
+    depthEffect: Boolean = true,
+    chromaticAberration: Boolean = false
+) = LiquidGlassConfig(blurRadius, refractionHeight, refractionAmount, vibrancy, depthEffect, chromaticAberration)
+
+// --- 💧 Helper Components ---
+
+/**
+ * A wrapper that records its content into a [Backdrop].
+ * Use this to wrap the image/background you want to be "behind" the glass.
+ */
+@Composable
+fun HydroDrop(
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+): Backdrop {
+    val backdrop = rememberLayerBackdrop {
+        drawContent()
+    }
+
+    Box(
+        modifier = modifier.layerBackdrop(backdrop),
+        content = content
+    )
+
+    return backdrop
+}
+
+/**
+ * 🌊 HydroGlass Container
+ * A layout that applies Hydro Physics and Liquid Glass visuals to its content.
+ * * @param draggable If true, the component can be dragged around.
+ * @param onPositionChange Callback for when the drag position updates (delta).
+ */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+@Composable
+fun HydroGlass(
+    modifier: Modifier = Modifier,
+    backdrop: Backdrop,
+    shape: Shape = ContinuousCapsule,
+    chromaticConfig: ChromaticConfig? = ChromaticConfig(),
+    animations: HydroAnimations = animations(onClick = HydroAction.Fluid),
+    effects: HydroEffects = effects(),
+    liquidGlass: LiquidGlassConfig = liquidGlassConfig(),
+    isBackgroundLiquidGlass: Boolean = true,
+    draggable: Boolean = false,
+    onPositionChange: ((Offset) -> Unit)? = null,
+    // Custom Visual Overrides (Optional)
+    highlight: (HydroState.() -> Highlight)? = null,
+    shadow: (HydroState.() -> Shadow)? = null,
+    innerShadow: (HydroState.() -> InnerShadow)? = null,
+    onDrawSurface: (DrawScope.(HydroState) -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val state = rememberHydroState()
+    val scope = rememberCoroutineScope()
+
+    // Animation for interaction (Press/Drag)
+    val interactionAnim = remember { Animatable(0f) }
+
+    // Internal physics for the ripple effect
+    val rippleProgress = remember { Animatable(0f) }
+
+    // Drag offset state
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+
+    // 🌊 Physics Engine (Drag Detection)
+    val physicsModifier = Modifier.pointerInput(Unit) {
+        val velocityTracker = VelocityTracker()
+        detectDragGestures(
+            onDragStart = { offset ->
+                state.touchPosition = offset
+                scope.launch {
+                    interactionAnim.animateTo(1f, spring(stiffness = Spring.StiffnessLow))
+                }
+            },
+            onDragEnd = {
+                scope.launch {
+                    interactionAnim.animateTo(0f, spring(stiffness = Spring.StiffnessLow))
+                }
+
+                // 🌊 Ripple when it stops dragging!
+                scope.launch {
+                    rippleProgress.snapTo(0f)
+                    rippleProgress.animateTo(1f, tween(1000, easing = LinearEasing))
+                }
+
+                state.velocity = 0f
+                state.scaleX = 1f
+                state.scaleY = 1f
+            },
+            onDragCancel = {
+                scope.launch { interactionAnim.animateTo(0f) }
+            }
+        ) { change, dragAmount ->
+            change.consume()
+            velocityTracker.addPosition(change.uptimeMillis, change.position)
+            state.touchPosition = change.position
+
+            // Handle Dragging
+            if (draggable) {
+                dragOffset += dragAmount
+                onPositionChange?.invoke(dragAmount)
+            }
+
+            // Calculate velocity for stretching
+            val velocity = velocityTracker.calculateVelocity()
+            val velocityMag = (velocity.x.absoluteValue + velocity.y.absoluteValue) / 2000f // Normalize
+            state.velocity = velocityMag
+
+            // Stretch logic
+            state.scaleX = 1f / (1f - (velocityMag * 0.1f).fastCoerceIn(-0.2f, 0.2f))
+            state.scaleY = 1f * (1f - (velocityMag * 0.05f).fastCoerceIn(-0.2f, 0.2f))
+        }
+    }.pointerInput(Unit) {
+        // 🌊 Detect Taps for clicking!
+        detectTapGestures(
+            onPress = { offset ->
+                state.touchPosition = offset
+                scope.launch {
+                    interactionAnim.animateTo(0.2f, spring(stiffness = Spring.StiffnessMedium))
+                }
+                tryAwaitRelease()
+                scope.launch {
+                    interactionAnim.animateTo(0f, spring(stiffness = Spring.StiffnessMedium))
+                }
+            },
+            onTap = {
+                // 🌊 Ripple when tapped!
+                scope.launch {
+                    rippleProgress.snapTo(0f)
+                    rippleProgress.animateTo(1f, tween(1000, easing = LinearEasing))
+                }
+            }
+        )
+    }
+
+    // Sync state
+    state.interactionProgress = interactionAnim.value
+
+    // Apply HydroChroma (The Distortion)
+    Box(
+        modifier = modifier
+            .offset { IntOffset(dragOffset.x.roundToInt(), dragOffset.y.roundToInt()) } // Apply Drag Position
+            .then(physicsModifier)
+            .hydroChroma(
+                chromaticConfig = chromaticConfig,
+                animations = animations, // Ripples handled manually via rippleProgress
+                effects = effects,
+                isBackgroundLiquidGlass = isBackgroundLiquidGlass,
+                shape = shape,
+                // We override the internal progress with our physics ripple
+                manualRippleProgress = rippleProgress.value,
+                manualTouchPosition = state.touchPosition
+            )
+            // Apply LiquidGlass (The Visuals)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { shape },
+                effects = {
+                    // Combine config from LiquidGlassConfig
+                    if (liquidGlass.vibrancy) vibrancy()
+
+                    // Dynamic Blur based on interaction + Config
+                    val baseBlur = liquidGlass.blurRadius.toPx()
+                    val dynamicBlur = baseBlur + (state.interactionProgress * 4f)
+                    blur(dynamicBlur)
+
+                    lens(
+                        liquidGlass.refractionHeight.toPx(),
+                        liquidGlass.refractionAmount.toPx(),
+                        liquidGlass.depthEffect,
+                        liquidGlass.chromaticAberration
+                    )
+                },
+                highlight = {
+                    highlight?.invoke(state) ?: Highlight.Default.copy(alpha = state.interactionProgress)
+                },
+                shadow = {
+                    shadow?.invoke(state) ?: Shadow(alpha = state.interactionProgress)
+                },
+                innerShadow = {
+                    innerShadow?.invoke(state) ?: InnerShadow(radius = 8.dp * state.interactionProgress, alpha = state.interactionProgress)
+                },
+                layerBlock = {
+                    scaleX = state.scaleX
+                    scaleY = state.scaleY
+                },
+                onDrawSurface = {
+                    if (onDrawSurface != null) {
+                        onDrawSurface(state)
+                    } else {
+                        // Default surface logic
+                        val progress = state.interactionProgress
+                        drawRect(Color.White.copy(0.1f), alpha = 1f - progress)
+                        drawRect(Color.Black.copy(alpha = 0.03f * progress))
+                    }
+                }
+            ),
+        content = content
+    )
+}
 
 // --- 🧠 Hydro Physics State ---
 
@@ -217,134 +446,6 @@ private const val HYDRO_CHROMA_SHADER = """
 """
 
 /**
- * 🌊 Modifier.hydroGlass
- *
- * The All-In-One modifier that combines HydroChroma physics with LiquidGlass visuals.
- * Handles dragging, stretching, and rippling automatically.
- *
- * @param backdrop The liquid glass backdrop to draw.
- * @param shape The shape of the glass (and the ripple clip).
- * @param hydroEffects Configuration for fluidity and chaos.
- */
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
-fun Modifier.hydroGlass(
-    backdrop: Backdrop,
-    shape: Shape = RectangleShape,
-    chromaticConfig: ChromaticConfig? = ChromaticConfig(),
-    animations: HydroAnimations = animations(onClick = HydroAction.Fluid),
-    effects: HydroEffects = effects(),
-    isBackgroundLiquidGlass: Boolean = true,
-    // Custom Visual Overrides (Optional)
-    highlight: (HydroState.() -> Highlight)? = null,
-    shadow: (HydroState.() -> Shadow)? = null,
-    innerShadow: (HydroState.() -> InnerShadow)? = null,
-    onDrawSurface: (DrawScope.(HydroState) -> Unit)? = null
-): Modifier = composed {
-    val state = rememberHydroState()
-    val scope = rememberCoroutineScope()
-
-    // Animation for interaction (Press/Drag)
-    val interactionAnim = remember { Animatable(0f) }
-
-    // Internal physics for the ripple effect
-    val rippleProgress = remember { Animatable(0f) }
-
-    // 🌊 Physics Engine (Drag Detection)
-    val physicsModifier = Modifier.pointerInput(Unit) {
-        val velocityTracker = VelocityTracker()
-        detectDragGestures(
-            onDragStart = { offset ->
-                state.touchPosition = offset
-                scope.launch {
-                    interactionAnim.animateTo(1f, spring(stiffness = Spring.StiffnessLow))
-                }
-            },
-            onDragEnd = {
-                scope.launch {
-                    interactionAnim.animateTo(0f, spring(stiffness = Spring.StiffnessLow))
-                }
-
-                // 🌊 Ripple when it stops!
-                scope.launch {
-                    rippleProgress.snapTo(0f)
-                    rippleProgress.animateTo(1f, tween(1000, easing = LinearEasing))
-                }
-
-                state.velocity = 0f
-                state.scaleX = 1f
-                state.scaleY = 1f
-            },
-            onDragCancel = {
-                scope.launch { interactionAnim.animateTo(0f) }
-            }
-        ) { change, dragAmount ->
-            change.consume()
-            velocityTracker.addPosition(change.uptimeMillis, change.position)
-            state.touchPosition = change.position
-
-            // Calculate velocity for stretching
-            val velocity = velocityTracker.calculateVelocity()
-            val velocityMag = (velocity.x.absoluteValue + velocity.y.absoluteValue) / 2000f // Normalize
-            state.velocity = velocityMag
-
-            // Stretch logic
-            state.scaleX = 1f / (1f - (velocityMag * 0.1f).fastCoerceIn(-0.2f, 0.2f))
-            state.scaleY = 1f * (1f - (velocityMag * 0.05f).fastCoerceIn(-0.2f, 0.2f))
-        }
-    }
-
-    // Sync state
-    state.interactionProgress = interactionAnim.value
-
-    // Apply HydroChroma (The Distortion)
-    this
-        .then(physicsModifier)
-        .hydroChroma(
-            chromaticConfig = chromaticConfig,
-            animations = animations, // Ripples handled manually via rippleProgress
-            effects = effects,
-            isBackgroundLiquidGlass = isBackgroundLiquidGlass,
-            shape = shape,
-            // We override the internal progress with our physics ripple
-            manualRippleProgress = rippleProgress.value,
-            manualTouchPosition = state.touchPosition
-        )
-        // Apply LiquidGlass (The Visuals)
-        .drawBackdrop(
-            backdrop = backdrop,
-            shape = { shape },
-            effects = {
-                // Dynamic Blur based on interaction
-                blur(effects.blur.toPx() + (state.interactionProgress * 4f))
-                vibrancy()
-            },
-            highlight = {
-                highlight?.invoke(state) ?: Highlight.Default.copy(alpha = state.interactionProgress)
-            },
-            shadow = {
-                shadow?.invoke(state) ?: Shadow(alpha = state.interactionProgress)
-            },
-            innerShadow = {
-                innerShadow?.invoke(state) ?: InnerShadow(radius = 8.dp * state.interactionProgress, alpha = state.interactionProgress)
-            },
-            layerBlock = {
-                scaleX = state.scaleX
-                scaleY = state.scaleY
-            },
-            onDrawSurface = {
-                if (onDrawSurface != null) {
-                    onDrawSurface(state)
-                } else {
-                    // Default surface logic (user provided)
-                    val progress = state.interactionProgress
-                    drawRect(Color.White.copy(0.1f), alpha = 1f - progress)
-                    drawRect(Color.Black.copy(alpha = 0.03f * progress))
-                }
-            }
-        )
-}
-
-/**
  * 🌊 Core Modifier.hydroChroma (Internal Engine)
  * Now supports manual control for the wrapper.
  */
@@ -395,7 +496,6 @@ fun Modifier.hydroChroma(
                         internalTouchPosition.value = down.position
                         currentSeed.floatValue = Random.nextFloat() * 100f
 
-                        // ... Randomization logic ...
                         val minStrength = with(density) { effects.expand.strength.start.toPx() }
                         val maxStrength = with(density) { effects.expand.strength.endInclusive.toPx() }
                         currentStrength.floatValue = Random.nextDouble(minStrength.toDouble(), maxStrength.toDouble()).toFloat()
@@ -427,7 +527,6 @@ fun Modifier.hydroChroma(
             shader.setFloatUniform("uFluidity", effects.fluidity)
             shader.setFloatUniform("uMorphStrength", effects.morphStrength)
 
-            // ... Mode flags and Chroma logic (Same as before) ...
             val clickMode = when (animations.clickAction) {
                 HydroAction.Expand -> 1; HydroAction.Fluid -> 2; else -> 0
             }
