@@ -9,7 +9,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -24,7 +26,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.capsule.ContinuousCapsule
 import com.kyant.capsule.ContinuousRoundedRectangle
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,7 +53,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HydroGlassDemo() {
     // 1. The Stage: Define the background to be refracted
-    val backdrop = HydroDrop(Modifier.fillMaxSize()) {
+    val hydrodrop = HydroDrop(Modifier.fillMaxSize()) {
         // A trippy gradient background
         Box(
             modifier = Modifier
@@ -58,14 +63,21 @@ fun HydroGlassDemo() {
             // Add some stripes for extra refraction detail
             Column(Modifier.fillMaxSize()) {
                 Image(
-                    painter = painterResource(R.drawable.wallpaper_light),
+                    painter = painterResource(R.drawable.system_home_screen_light),
                     contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
                 )
+
             }
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+
+    Box(
+        Modifier
+            .fillMaxSize()
+    ) {
         Text(
             "DRAG & TOUCH",
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 100.dp),
@@ -75,17 +87,18 @@ fun HydroGlassDemo() {
         )
 
         // 2. The Hero: HydroGlass Component
-        HydroGlass(
+        HydroChroma(
             modifier = Modifier
                 .align(Alignment.Center)
-                .width(300.dp)
-                .height(200.dp),
+                .fillMaxWidth()
+                .padding(20.dp)
+                .height(100.dp),
 
             // Connect to our background
-            backdrop = backdrop,
+            backdrop = hydrodrop,
 
             // Shape
-            shape = ContinuousRoundedRectangle(48.dp),
+            shape = ContinuousCapsule,
 
             // 🌊 Physics Configuration
             animations = animations(
@@ -93,26 +106,26 @@ fun HydroGlassDemo() {
                 onAnimate = HydroAction.Morph, // Breathe...
             ),
             effects = effects(
-                fluidity = 5f,         // Very liquid
-                chromaticDensity = 0.8f, // Strong color split
+                fluidity = 1f,         // Very liquid
+                chromaticDensity = 0.5f, // Strong color split
                 maxTilt = 5f            // Cap tilt distortion
             ),
-            chromaticConfig = chromaticAberration(
-                listOf(Color.Cyan, Color.Magenta, Color.Yellow)
+            chromaticConfig = ChromaticConfig(
+                colors = listOf(Color.Red, Color.Transparent, Color.Blue)
             ),
 
             // 🧊 Visuals Configuration
             liquidGlass = liquidGlassConfig(
                 blurRadius = 1.dp,
-                refractionHeight = 64.dp,
-                refractionAmount = 128.dp,
-                vibrancy = false,
+                refractionHeight = 32.dp,
+                refractionAmount = 64.dp,
+                vibrancy = true,
                 chromaticAberration = false // Let Hydro handle the chroma
             ),
 
             // Behavior
             draggable = true,
-            isBackgroundLiquidGlass = true,
+            onDrawSurface = null,
 
             // Custom Drawing
         ) {
@@ -123,7 +136,6 @@ fun HydroGlassDemo() {
                     fontWeight = FontWeight.Black,
                     fontSize = 32.sp,
                     modifier = Modifier
-                        .hydroChroma()
                 )
             }
         }

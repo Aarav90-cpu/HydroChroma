@@ -1,3 +1,4 @@
+import com.android.build.gradle.internal.tasks.getSubProjectNativeLibs
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -40,7 +41,7 @@ kotlin {
 
 dependencies {
     // The core Compose libraries
-    implementation(platform(libs.androidx.compose.bom.v20240200))
+    implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.compose.foundation)

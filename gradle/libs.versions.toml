@@ -2,7 +2,6 @@
 agp = "8.13.2"
 backdrop = "1.0.4"
 capsule = "2.1.2"
-composeBomVersion = "2024.02.00"
 kotlin = "2.3.0"
 coreKtx = "1.17.0"
 junit = "4.13.2"
@@ -15,7 +14,6 @@ appcompat = "1.7.1"
 material = "1.13.0"
 
 [libraries]
-androidx-compose-bom-v20240200 = { module = "androidx.compose:compose-bom", version.ref = "composeBomVersion" }
 androidx-compose-foundation = { module = "androidx.compose.foundation:foundation" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-material3 = { module = "androidx.compose.material3:material3" }

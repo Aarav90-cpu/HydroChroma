@@ -13,9 +13,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
+import kotlin.math.sin
 
+/**
+ * 🎛️ rememberTilt
+ * Hooks into the device Accelerometer to detect tilt.
+ * * @param restingAngleDegrees The angle at which the phone is considered "flat" (default 45°).
+ */
 @Composable
-fun rememberTilt(): Offset {
+fun rememberTilt(restingAngleDegrees: Float = 45f): Offset {
     val context = LocalContext.current
     var tilt by remember { mutableStateOf(Offset.Zero) }
 
@@ -26,10 +32,21 @@ fun rememberTilt(): Offset {
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent?) {
                 event?.let {
-                    // X axis: Tilt Left/Right
-                    val x = -(it.values[0] / 5f).coerceIn(-1f, 1f)
+                    // X axis: Tilt Left/Right (Normal logic)
+                    val xRaw = it.values[0]
+                    val x = -(xRaw / 5f).coerceIn(-1f, 1f)
+
                     // Y axis: Tilt Up/Down
-                    val y = (it.values[1] / 5f).coerceIn(-1f, 1f)
+                    // 9.81 = Vertical (90°), 0 = Flat (0°)
+                    // We want to offset so 45° (approx 7.0m/s²) is 0.
+                    val yRaw = it.values[1]
+
+                    // Convert degrees to expected gravity component roughly
+                    // sin(45) * 9.81 ≈ 6.9
+                    val restingGravity = sin(Math.toRadians(restingAngleDegrees.toDouble())).toFloat() * 9.81f
+
+                    val y = ((yRaw - restingGravity) / 5f).coerceIn(-1f, 1f)
+
                     tilt = Offset(x, y)
                 }
             }
