@@ -3,6 +3,10 @@
 **By ARK Studios**
 
 ---
+
+***Check out the wiki for the Documentation***
+
+---
 [![](https://jitpack.io/v/Aarav90-cpu/HydroChroma.svg)](https://jitpack.io/#Aarav90-cpu/HydroChroma)
 ---
 
