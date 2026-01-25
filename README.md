@@ -4,7 +4,7 @@
 
 ---
 
-***Check out the wiki for the [Documentation](https://github.com/Aarav90-cpu/HydroChroma/wiki)***
+***Check out the wiki for the [Documentation](https://github.com/Aarav90-cpu/HydroChroma/wiki](https://github.com/Aarav90-cpu/HydroChroma/wiki/1)-Get-Started)***
 
 ---
 [![](https://jitpack.io/v/Aarav90-cpu/HydroChroma.svg)](https://jitpack.io/#Aarav90-cpu/HydroChroma)
