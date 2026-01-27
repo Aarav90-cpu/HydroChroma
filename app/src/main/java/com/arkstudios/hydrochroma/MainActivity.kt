@@ -65,7 +65,7 @@ fun HydroTabDemo() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .hydro(
+            .hydroChroma(
                 chromaticConfig = chromaticAberration(listOf(Color.Cyan, Color.Magenta, Color.Yellow)),
                 animations = animations(onClick = HydroAction.Expand), // Using Expand logic
                 effects = effects(

@@ -29,9 +29,9 @@ import com.arkstudios.hydrochroma.HydroChroma
 import com.arkstudios.hydrochroma.animations
 import com.arkstudios.hydrochroma.chromaticAberration
 import com.arkstudios.hydrochroma.effects
-import com.arkstudios.hydrochroma.hydro
 import com.arkstudios.hydrochroma.hydroChroma
 import com.arkstudios.hydrochroma.liquidGlassConfig
+import com.arkstudios.hydrochroma.noLiquidGlass
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.capsule.ContinuousCapsule
@@ -71,19 +71,19 @@ fun HydroBottomNavigation(
                     isBackgroundLiquidGlass = true,
                     chromaticConfig = null,
                     // Subtle fluid physics for the bar itself (breathing)
-                    animations = animations(onAnimate = HydroAction.Morph),
+                    animations = animations(
+                        onAnimate = HydroAction.Morph,
+                        onClick = HydroAction.Fluid
+                    ),
                     effects = effects(
                         fluidity = 1.2f,
                         morphStrength = 0.05f,
                         blur = 0.dp
                     ),
                     // Clean glass visuals
-                    liquidGlass = liquidGlassConfig(
-                        blurRadius = 10.dp,
-                        refractionHeight = 12.dp,
-                        refractionAmount = 24.dp,
-                        vibrancy = true
-                    ),
+                    liquidGlass = noLiquidGlass(),
+                    draggable = true,
+
                     onDrawSurface = {
                         // Glass tint
                         drawRect(containerColor)
@@ -133,10 +133,10 @@ fun HydroBottomNavigationItem(
 
     // 2. Chromatic Modifier: Only apply RGB split if selected
     val chromaModifier = if (selected && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Modifier.hydro(
+        Modifier.hydroChroma(
             chromaticConfig = chromaticAberration(listOf(Color.Red, Color.Green, Color.Blue)),
             effects = effects(
-                chromaticDensity = 0.8f, // Visible glitch
+                chromaticDensity = 0.5f, // Visible glitch
                 fluidity = 0f // No ripples needed on the icon itself, just the color split
             ),
             isBackgroundLiquidGlass = true // Overlaying glass

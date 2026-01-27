@@ -76,6 +76,20 @@ fun chromaticAberration(colors: List<Color>): ChromaticConfig {
     return ChromaticConfig(colors.take(8))
 }
 
+/**
+ * 🚫 Disables custom chromatic aberration (Physics distortion only).
+ */
+fun noChromaticConfig(): ChromaticConfig = ChromaticConfig(emptyList())
+
+fun noLiquidGlass(): LiquidGlassConfig = liquidGlassConfig(
+    blurRadius = 500.dp,
+    refractionAmount = 0.dp,
+    refractionHeight = 0.dp,
+    vibrancy = false,
+    depthEffect = false,
+    chromaticAberration = false
+)
+
 @Immutable
 data class ExpandConfig(
     val strength: ClosedRange<Dp> = 10.dp..35.dp,
@@ -146,10 +160,6 @@ fun liquidGlassConfig(
 
 // --- 💧 Helper Components ---
 
-/**
- * A wrapper that records its content into a [Backdrop].
- * Use this to wrap the image/background you want to be "behind" the glass.
- */
 @Composable
 fun HydroDrop(
     modifier: Modifier = Modifier,
@@ -169,9 +179,6 @@ fun HydroDrop(
 
 /**
  * 🌊 HydroGlass Container
- * A layout that applies Hydro Physics and Liquid Glass visuals to its content.
- * * @param draggable If true, the component can be dragged around.
- * @param onPositionChange Callback for when the drag position updates (delta).
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
@@ -179,14 +186,13 @@ fun HydroChroma(
     modifier: Modifier = Modifier,
     backdrop: Backdrop,
     shape: Shape = ContinuousCapsule,
-    chromaticConfig: ChromaticConfig? = ChromaticConfig(),
+    chromaticConfig: ChromaticConfig? = noChromaticConfig(), // Default to NO custom chroma to prevent tinting
     animations: HydroAnimations = animations(onClick = HydroAction.Fluid),
     effects: HydroEffects = effects(),
-    liquidGlass: LiquidGlassConfig = liquidGlassConfig(),
+    liquidGlass: LiquidGlassConfig = noLiquidGlass(),
     isBackgroundLiquidGlass: Boolean = true,
     draggable: Boolean = false,
     onPositionChange: ((Offset) -> Unit)? = null,
-    // Custom Visual Overrides (Optional)
     highlight: (HydroState.() -> Highlight)? = null,
     shadow: (HydroState.() -> Shadow)? = null,
     innerShadow: (HydroState.() -> InnerShadow)? = null,
@@ -206,7 +212,7 @@ fun HydroChroma(
                 chromaticConfig = chromaticConfig,
                 animations = animations,
                 effects = effects,
-                liquidGlass = liquidGlass, // 👈 Passing it down to the modifier!
+                liquidGlass = liquidGlass,
                 isBackgroundLiquidGlass = isBackgroundLiquidGlass,
                 draggable = draggable,
                 onPositionChange = { delta ->
@@ -297,12 +303,11 @@ private const val HYDRO_CHROMA_SHADER = """
         
         float maskMultiplier = 1.0;
         if (uUseAlphaMask == 1) {
-            // 🛑 AGGRESSIVE MASKING: Raised threshold from 0.1 to 0.3
-            // This ensures semi-transparent glass (usually < 0.2 alpha) gets ZERO chromatic effect.
-            // Only opaque content (Text/Icons > 0.3 alpha) will trigger the color split.
+            // High threshold to protect glass
             maskMultiplier = smoothstep(0.3, 0.9, centerSample.a);
         }
         
+        // If color count is 0, skip chroma logic entirely
         if (length(uTilt) < 0.001 || uColorCount == 0) {
             return centerSample;
         }
@@ -336,7 +341,7 @@ private const val HYDRO_CHROMA_SHADER = """
 fun Modifier.hydroChroma(
     backdrop: Backdrop,
     shape: Shape = RectangleShape,
-    chromaticConfig: ChromaticConfig? = ChromaticConfig(),
+    chromaticConfig: ChromaticConfig? = noChromaticConfig(), // Default to NO config
     animations: HydroAnimations = animations(onClick = HydroAction.Fluid),
     effects: HydroEffects = effects(),
     liquidGlass: LiquidGlassConfig = liquidGlassConfig(),
@@ -384,18 +389,19 @@ fun Modifier.hydroChroma(
             velocityTracker.addPosition(change.uptimeMillis, change.position)
             state.touchPosition = change.position
 
-            // Calculate velocity for stretching
-            val velocity = velocityTracker.calculateVelocity()
-            val velocityMag = (velocity.x.absoluteValue + velocity.y.absoluteValue) / 2000f
-            state.velocity = velocityMag
-
-            state.scaleX = 1f / (1f - (velocityMag * 0.1f).fastCoerceIn(-0.2f, 0.2f))
-            state.scaleY = 1f * (1f - (velocityMag * 0.05f).fastCoerceIn(-0.2f, 0.2f))
-
-            // Notify drag (Logic for movement happens in parent)
             if (draggable) {
                 onPositionChange?.invoke(dragAmount)
             }
+
+            val velocity = velocityTracker.calculateVelocity()
+            // 🛑 AMPLIFIED VELOCITY: Lowered divisor from 2000f to 800f
+            // This makes the stretch much more visible during normal drags
+            val velocityMag = (velocity.x.absoluteValue + velocity.y.absoluteValue) / 800f
+            state.velocity = velocityMag
+
+            // 🛑 AMPLIFIED STRETCH: Increased max distortion range
+            state.scaleX = 1f / (1f - (velocityMag * 0.15f).fastCoerceIn(-0.3f, 0.3f))
+            state.scaleY = 1f * (1f - (velocityMag * 0.08f).fastCoerceIn(-0.3f, 0.3f))
         }
     }.pointerInput(Unit) {
         detectTapGestures(
@@ -418,9 +424,8 @@ fun Modifier.hydroChroma(
 
     this
         .then(physicsModifier)
-        // 🌊 Apply Physics (Distortion + Custom Chromatic Config on Content)
-        .hydro(
-            chromaticConfig = chromaticConfig, // Your custom colors apply HERE (to the content)
+        .hydroChroma(  // No Backdrop
+            chromaticConfig = chromaticConfig,
             animations = animations,
             effects = effects,
             isBackgroundLiquidGlass = isBackgroundLiquidGlass,
@@ -428,7 +433,6 @@ fun Modifier.hydroChroma(
             manualRippleProgress = rippleProgress.value,
             manualTouchPosition = state.touchPosition
         )
-        // 🧊 Apply Liquid Glass (Refraction + Native Chromatic Aberration on Background)
         .drawBackdrop(
             backdrop = backdrop,
             shape = { shape },
@@ -437,14 +441,11 @@ fun Modifier.hydroChroma(
                 val baseBlur = liquidGlass.blurRadius.toPx()
                 val dynamicBlur = baseBlur + (state.interactionProgress * 4f)
                 blur(dynamicBlur)
-
-                // Kyant's lens effect uses its OWN chromaticAberration flag (boolean)
-                // This applies to the glass refraction itself, separate from your HydroChroma config.
                 lens(
                     liquidGlass.refractionHeight.toPx(),
                     liquidGlass.refractionAmount.toPx(),
                     liquidGlass.depthEffect,
-                    liquidGlass.chromaticAberration // Uses boolean from LiquidGlassConfig
+                    liquidGlass.chromaticAberration
                 )
             },
             highlight = {
@@ -464,8 +465,8 @@ fun Modifier.hydroChroma(
                 if (onDrawSurface != null) {
                     onDrawSurface(state)
                 } else {
-                    // Default surface logic - Transparent by default now
-                    // drawRect(Color.White.copy(0.02f * state.interactionProgress), style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
+                    // Default logic (User requested transparent glass)
+                    // No default drawRect here.
                 }
             }
         )
@@ -476,8 +477,8 @@ fun Modifier.hydroChroma(
  * Now supports manual control for the wrapper.
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-fun Modifier.hydro(
-    chromaticConfig: ChromaticConfig? = ChromaticConfig(),
+fun Modifier.hydroChroma(
+    chromaticConfig: ChromaticConfig? = noChromaticConfig(), // Default to NO config
     animations: HydroAnimations = animations(onClick = HydroAction.Fluid),
     effects: HydroEffects = effects(),
     isBackgroundLiquidGlass: Boolean = false,
@@ -562,7 +563,8 @@ fun Modifier.hydro(
             shader.setIntUniform("uModeClick", clickMode)
             shader.setIntUniform("uModeAnimate", animateMode)
 
-            if (chromaticConfig != null) {
+            // 🛑 CHECK FOR NULL OR EMPTY COLORS
+            if (chromaticConfig != null && chromaticConfig.colors.isNotEmpty()) {
                 val clampedTiltX = (tilt.x * 15f).coerceIn(-effects.maxTilt, effects.maxTilt)
                 val clampedTiltY = (tilt.y * 15f).coerceIn(-effects.maxTilt, effects.maxTilt)
                 shader.setFloatUniform("uTilt", clampedTiltX, clampedTiltY)
@@ -579,6 +581,7 @@ fun Modifier.hydro(
                 shader.setFloatUniform("uColors", colorArray)
                 shader.setIntUniform("uUseAlphaMask", if (isBackgroundLiquidGlass) 1 else 0)
             } else {
+                // DISABLED CHROMA
                 shader.setFloatUniform("uTilt", 0f, 0f)
                 shader.setFloatUniform("uChromaticDensity", 0f)
                 shader.setIntUniform("uColorCount", 0)
