@@ -59,7 +59,7 @@ publishing {
             // Replace 'YourGitHubUsername' with your actual GitHub username!
             groupId = "com.arkstudios.hydrochroma"
             artifactId = "hydrochroma"
-            version = "alpha2.0"
+            version = "alpha4.0"
 
             afterEvaluate {
                 from(components["release"])
